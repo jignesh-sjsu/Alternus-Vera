@@ -58,7 +58,7 @@ def predictIntention(text):
 
     def clean_spell_checker(df):
       
-        model = gensim.models.KeyedVectors.load_word2vec_format('/content/Datasets/GoogleNews-vectors-negative300.bin.gz', binary=True)
+        model = gensim.models.KeyedVectors.load_word2vec_format('https://s3.amazonaws.com/dl4j-distribution/GoogleNews-vectors-negative300.bin.gz', binary=True)
         words = model.index2word
         w_rank = {}
         for i,word in enumerate(words):
