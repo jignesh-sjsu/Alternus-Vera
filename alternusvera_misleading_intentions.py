@@ -206,12 +206,12 @@ def predictIntention(text):
         data = df
         train_lda = data[['clean','index']]
         processed_docs = train_lda['clean'].map(lambda doc: doc.split(" "))
-        print(processed_docs)
+        # print(processed_docs)
         dictionary = gensim.corpora.Dictionary(processed_docs)
-        print(dictionary)
+        # print(dictionary)
         # dictionary.filter_extremes(no_below=2, no_above=0.5, keep_n=100000)
         bow_corpus = [dictionary.doc2bow(doc) for doc in processed_docs]
-        print(bow_corpus)
+        # print(bow_corpus)
         tfidf = models.TfidfModel(bow_corpus)
         corpus_tfidf = tfidf[bow_corpus]
         lda_model = gensim.models.LdaMulticore(bow_corpus, num_topics=10, id2word=dictionary, passes=2, workers=2)
