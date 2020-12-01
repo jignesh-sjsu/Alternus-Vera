@@ -14,6 +14,16 @@ import warnings
 import nltk.sentiment
 import pandas as pd
 import gensim
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize, sent_tokenize
+from collections import Counter
+from gensim.models import Word2Vec
+import numpy as np
+import re
+import statistics
+nltk.download('averaged_perceptron_tagger')
+
 from gensim import corpora, models
 from nltk.stem.wordnet import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -159,10 +169,13 @@ def predictIntention(text):
         neu_score = get_pols[2]
         pos_score = get_pols[3]
         sentiment_score = get_pols[1:][-1]
-
-        return neg_score, neu_score, pos_score
+        
+        df['sentiment_score'] = sentiment_score
+        df['vader_polarity'] = vader_polarity
+        return df
 
     def get_sensational_score(df):
+        # sensational_words = pd.read_csv('./sensational_words_dict.csv', usecols=[0], sep='\t+', header=None)
         sensational_words = pd.read_csv('./AlternusVera_MisleadingIntention/Datasets/sensational_words_dict.csv', usecols=[0], sep='\t+', header=None)
         corpus = []
         corpus.append(text)
@@ -170,6 +183,7 @@ def predictIntention(text):
         sensational_dictionary = ' '.join(sensational_words[0].astype(str))
         sensational_corpus.append(sensational_dictionary)
         
+        # sentic_net = pd.read_csv('./senticnet5.txt', sep="\t+", header=None, usecols=[0,1,2], names = ["Token", "Polarity", "Intensity"])
         sentic_net = pd.read_csv('./AlternusVera_MisleadingIntention/Datasets/senticnet5.txt', sep="\t+", header=None, usecols=[0,1,2], names = ["Token", "Polarity", "Intensity"])
         warnings.filterwarnings("ignore")
         sentic_net = sentic_net[~sentic_net['Token'].str.contains('|'.join('_'),na=False)]
@@ -199,7 +213,8 @@ def predictIntention(text):
         for i in range(len(train_tfidf.toarray())):
             similarity_score.append(1 - spatial.distance.cosine(tf_idf_senti[0].toarray(), tfidf_corpus[i].toarray()))
 
-        return similarity_score[0]
+        df['sensational_score'] = similarity_score[0]
+        return df
 
 
     def get_lda_score(df):
@@ -220,21 +235,61 @@ def predictIntention(text):
             for index, score in sorted(lda_model_tfidf[bow_corpus[i]], key=lambda tup: -1*tup[1]):
                 df['lda_score'] = score
 
-        return df['lda_score'][0]
+        return df
+
+    
+    def get_POS(df):
+        stop_words = set(stopwords.words('english'))
+        postags = ['CC','CD','DT','EX','FW','IN','JJ','JJR','JJS','LS','MD','NN','NNS','NNP','NNPS','PDT','POS','PRP','PRP$','RB','RBR','RBS','RP','SYM','TO','UH','VB','VBD','VBG','VBN','VBP','VBZ','WDT','WP','WP$','WRB']
+
+        for i,txt in enumerate(postags):
+          df[txt]=0.00
+
+        def getTokerns(txt):
+          tokenized = sent_tokenize(txt)
+          for i in tokenized:
+              wordsList = nltk.word_tokenize(i)
+              wordsList = [w for w in wordsList if not w in stop_words]
+              tagged = nltk.pos_tag(wordsList)
+              counts = Counter(tag for (word, tag) in tagged)
+              total = sum(counts.values())
+              a = dict((word, float(count) / total) for (word, count) in
+                      counts.items())
+              return a;
+
+        for i,txt in enumerate(df['clean']):
+          a = getTokerns(txt)
+          for key in a:
+                if key in postags:
+                   df[key][i]=a[key]
+
+        return df
 
 
     df_data = pd.DataFrame([[text,0]],columns=['clean', 'index'])
     df_data = clean(df_data)
-    neg_score, neu_score, pos_score = sentiment_analysis(df_data)
-    sensational_score = get_sensational_score(df_data)
-    lda_score = get_lda_score(df_data)
-
-    df_scores = pd.DataFrame([[lda_score,sensational_score,neg_score,pos_score,neu_score]],
-                      columns=['lda_score','sensational_score','neg_sentiment_score','pos_sentiment_score','neu_sentiment_score'])
+    df_data = sentiment_analysis(df_data)
+    df_data = get_sensational_score(df_data)
+    df_data = get_lda_score(df_data)
+    df_data = get_POS(df_data)
     
-    with open('./AlternusVera_MisleadingIntention/random_forest.pkl', 'rb') as file:  
-        random_forest_model = pickle.load(file)
+    df = df_data.filter(items=['lda_score','sensational_score','sentiment_score','vader_polarity',
+                               'CC','CD','DT','EX','FW','IN','JJ','JJR','JJS','LS','MD','NN','NNS',
+                               'NNP','NNPS','PDT','POS','PRP','PRP$','RB','RBR','RBS','RP','SYM',
+                               'TO','UH','VB','VBD','VBG','VBN','VBP','VBZ','WDT','WP','WP$','WRB'])
+       
+    with open('./AlternusVera_MisleadingIntention/neural_net.pkl', 'rb') as file:  
+    # with open('./neural_net.pkl', 'rb') as file:  
+        neural_net_model = pickle.load(file)
 
-    pred = random_forest_model.predict(df_scores)
+    pred = neural_net_model.predict(df)
     print(pred[0])
-    return pred[0]
+    
+    MI_Label_map={0:'pants-fire',
+                  1:'false',
+                  2:'barely-true',
+                  3:'half-true',
+                  4:'mostly-true',
+                  5:'true'}
+
+    return MI_Label_map.get(pred[0])
