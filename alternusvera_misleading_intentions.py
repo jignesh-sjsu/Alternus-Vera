@@ -283,7 +283,7 @@ def predictIntention(text):
         neural_net_model = pickle.load(file)
 
     pred = neural_net_model.predict(df)
-    print(pred[0])
+    # print(pred[0])
     
     MI_Label_map={0:'pants-fire',
                   1:'false',
